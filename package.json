@@ -1,0 +1,25 @@
+{
+  "name": "ocr-translator-extension",
+  "version": "1.0.0",
+  "description": "화면 속 이미지나 드래그할 수 없는 형태의 텍스트(예: 웹툰, 해외 포스터 등)를 쉽고 빠르게 번역해 주는 구글 크롬(Google Chrome) 확장 프로그램입니다.",
+  "main": "background.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "node scripts/copy-tesseract.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bssm-oss/img-to-translate.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/bssm-oss/img-to-translate/issues"
+  },
+  "homepage": "https://github.com/bssm-oss/img-to-translate#readme",
+  "dependencies": {
+    "tesseract.js": "^7.0.0"
+  }
+}

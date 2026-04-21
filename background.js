@@ -87,10 +87,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
         // --- LLM Cleaner / Noise Filter ---
         
-        // 0. Remove special characters and punctuations from the beginning of each line
+        // 0. Remove special characters and punctuations from the beginning of each line,
+        // then join with space (not newline) so one sentence fits on one line for natural translation.
         extractedText = extractedText.split('\n')
           .map(line => line.replace(/^[\p{P}\p{S}]+/u, '').trim())
-          .join('\n')
+          .filter(line => line.length > 0)
+          .join(' ')
+          .replace(/\s+/g, ' ')
           .trim();
 
         // Ignore empty strings
