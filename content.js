@@ -4,8 +4,32 @@ let isOverlayActive = false;
 let isDragging = false;
 let startX, startY;
 
+let config = {
+  hotkey: {
+    ctrl: false,
+    alt: true,
+    shift: true,
+    meta: false,
+    key: 'Shift'
+  }
+};
+
 function init() {
   console.log("[OCR Translator] Initializing content script. Ready for hotkeys.");
+  
+  // Load initial config
+  chrome.storage.sync.get({ hotkey: config.hotkey }, (items) => {
+    config.hotkey = items.hotkey;
+  });
+
+  // Listen for config changes
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'sync' && changes.hotkey) {
+      config.hotkey = changes.hotkey.newValue;
+      console.log("[OCR Translator] Hotkey updated:", config.hotkey);
+    }
+  });
+
   overlay = document.createElement('div');
   overlay.id = 'ocr-translator-overlay';
   document.body.appendChild(overlay);
@@ -18,21 +42,50 @@ function init() {
   overlay.addEventListener('mousemove', onMouseMove);
   overlay.addEventListener('mouseup', onMouseUp);
 
-  document.addEventListener('keydown', onKeyDown);
-  document.addEventListener('keyup', onKeyUp);
+  // Use capturing phase (true) to bypass site-level event blocking
+  window.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('keyup', onKeyUp, true);
+}
+
+function isHotkeyMatch(e, targetHotkey) {
+  // Check modifiers
+  if (e.ctrlKey !== targetHotkey.ctrl) return false;
+  if (e.altKey !== targetHotkey.alt) return false;
+  if (e.shiftKey !== targetHotkey.shift) return false;
+  if (e.metaKey !== targetHotkey.meta) return false;
+
+  // Check main key
+  const mainKeys = ['Control', 'Alt', 'Shift', 'Meta'];
+  if (mainKeys.includes(e.key)) {
+    // If the target hotkey only consists of modifiers, we match if the last modifier pressed is correct
+    return mainKeys.includes(targetHotkey.key);
+  }
+
+  return e.key.toLowerCase() === targetHotkey.key.toLowerCase();
 }
 
 function onKeyDown(e) {
-  // Use either Meta (Cmd on Mac) or Ctrl.
-  const isCmdOrCtrl = e.metaKey || e.ctrlKey;
-  if (isCmdOrCtrl && e.shiftKey && !isOverlayActive) {
-    activateOverlay();
+  if (isHotkeyMatch(e, config.hotkey)) {
+    if (!isOverlayActive) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      activateOverlay();
+    }
   }
 }
 
 function onKeyUp(e) {
-  const isCmdOrCtrl = e.metaKey || e.ctrlKey;
-  if (isOverlayActive && (!e.shiftKey || !isCmdOrCtrl)) {
+  // Deactivate if any of the required modifiers are released
+  const h = config.hotkey;
+  const releasedModifier = 
+    (h.ctrl && !e.ctrlKey) || 
+    (h.alt && !e.altKey) || 
+    (h.shift && !e.shiftKey) || 
+    (h.meta && !e.metaKey);
+
+  const releasedMainKey = e.key.toLowerCase() === h.key.toLowerCase();
+
+  if (isOverlayActive && (releasedModifier || releasedMainKey)) {
     if (!isDragging) {
       deactivateOverlay();
     }
@@ -96,11 +149,15 @@ function onMouseUp(e) {
   
   // Hide overlay immediately before capture
   overlay.style.display = 'none';
+
+  // Find scroll parent at the center of selection
+  const targetEl = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  const scrollParent = getScrollParent(targetEl);
   
   // Ask background to capture screen
   chrome.runtime.sendMessage({ action: 'captureScreen' }, response => {
     // Show comment box with loading state
-    const commentBox = createCommentBox(rect.left, rect.top, rect.width, rect.height);
+    const commentBox = createCommentBox(rect.left, rect.top, rect.width, rect.height, scrollParent);
     
     if (chrome.runtime.lastError || !response || response.error) {
        updateCommentBox(commentBox, null, "Failed to capture screen.");
@@ -132,6 +189,21 @@ function onMouseUp(e) {
   });
 }
 
+function getScrollParent(node) {
+  if (node == null || node === document.body || node === document.documentElement) {
+    return window;
+  }
+
+  const overflowY = window.getComputedStyle(node).overflowY;
+  const isScrollable = overflowY === 'auto' || overflowY === 'scroll';
+  
+  if (isScrollable && node.scrollHeight > node.clientHeight) {
+    return node;
+  }
+
+  return getScrollParent(node.parentNode);
+}
+
 function cropImage(dataUrl, sx, sy, sw, sh, callback) {
   const img = new Image();
   img.onload = () => {
@@ -146,7 +218,7 @@ function cropImage(dataUrl, sx, sy, sw, sh, callback) {
   img.src = dataUrl;
 }
 
-function createCommentBox(x, y, selWidth, selHeight) {
+function createCommentBox(x, y, selWidth, selHeight, scrollParent) {
   const box = document.createElement('div');
   box.className = 'ocr-translator-comment-box';
   
@@ -158,6 +230,22 @@ function createCommentBox(x, y, selWidth, selHeight) {
   
   box.style.left = isRightOverflow ? (x + window.scrollX - 310) + 'px' : left + 'px';
   box.style.top = top + 'px';
+
+  // Handle scrolling of the sub-container
+  const initialScrollTop = scrollParent === window ? window.scrollY : scrollParent.scrollTop;
+  const initialScrollLeft = scrollParent === window ? window.scrollX : scrollParent.scrollLeft;
+
+  const onScroll = () => {
+    const currentScrollTop = scrollParent === window ? window.scrollY : scrollParent.scrollTop;
+    const currentScrollLeft = scrollParent === window ? window.scrollX : scrollParent.scrollLeft;
+    
+    const dx = currentScrollLeft - initialScrollLeft;
+    const dy = currentScrollTop - initialScrollTop;
+    
+    box.style.transform = `translate(${-dx}px, ${-dy}px)`;
+  };
+
+  scrollParent.addEventListener('scroll', onScroll);
   
   box.innerHTML = `
     <div class="ocr-translator-comment-header">
@@ -176,6 +264,7 @@ function createCommentBox(x, y, selWidth, selHeight) {
   
   // Close button
   box.querySelector('.ocr-translator-close-btn').addEventListener('click', () => {
+    scrollParent.removeEventListener('scroll', onScroll);
     box.remove();
   });
   

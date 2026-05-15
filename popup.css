@@ -49,6 +49,55 @@ select:focus {
   box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
 }
 
+.hotkey-config {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.hotkey-display {
+  flex: 1;
+  padding: 8px;
+  background-color: #EEE;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid #CCC;
+}
+
+.hotkey-display.recording {
+  background-color: #FFF3E0;
+  border-color: #FF9800;
+  color: #E65100;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+.secondary-btn {
+  padding: 8px 12px;
+  font-size: 12px;
+  background-color: #666;
+  margin-top: 0 !important;
+}
+
+.secondary-btn:hover {
+  background-color: #444;
+}
+
+.hint {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
 button {
   margin-top: 8px;
   padding: 10px;
